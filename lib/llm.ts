@@ -8,13 +8,15 @@ const GEMINI_API_KEY =
   process.env.GOOGLE_API_KEY ||
   "";
 
-// Try multiple model names in order
+// Prefer env, then try modern model names
 const MODEL_CANDIDATES = [
   process.env.GEMINI_MODEL,
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-001",
   "gemini-1.5-flash",
   "gemini-1.5-flash-latest",
-  "gemini-2.0-flash",
-  "gemini-1.5-flash-001",
+  "gemini-2.5-flash",
+  "gemini-flash-latest",
 ].filter(Boolean) as string[];
 
 export async function callGemini(prompt: string): Promise<string> {
@@ -45,16 +47,16 @@ export async function callGemini(prompt: string): Promise<string> {
       const data = await res.json();
 
       if (!res.ok) {
-        lastError = `Model ${model} → ${res.status}: ${data?.error?.message || JSON.stringify(data).slice(0, 150)}`;
+        lastError = `${model} → ${res.status}: ${data?.error?.message || "unknown"}`;
         continue;
       }
 
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (text) return text;
 
-      lastError = `Model ${model} → no text in response`;
+      lastError = `${model} → empty response`;
     } catch (e: any) {
-      lastError = `Model ${model} → ${e.message}`;
+      lastError = `${model} → ${e.message}`;
     }
   }
 
