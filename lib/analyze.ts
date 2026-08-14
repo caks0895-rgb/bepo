@@ -1,6 +1,5 @@
 /**
  * Core Reality Gap analysis logic
- * Uses Gemini for scoring when available
  */
 
 import { scoreRealityGap } from "./llm";
@@ -17,8 +16,6 @@ export interface RealityGapResult {
   label: "High Gap" | "Medium Gap" | "Low Gap" | "Aligned";
   confidence: number;
   onchain: {
-    volume24h?: number;
-    holderChange24h?: number;
     smartMoneyActivity?: "accumulating" | "distributing" | "neutral" | "unknown";
   };
   social: {
@@ -28,12 +25,12 @@ export interface RealityGapResult {
   summary: string;
   timestamp: string;
   source?: "llm" | "heuristic";
+  debug?: string;
 }
 
 export async function analyzeToken(input: AnalyzeRequest): Promise<RealityGapResult> {
   const address = (input.address || "unknown").toLowerCase();
 
-  // === Placeholder signals (will be replaced by real Alchemy + social data) ===
   const hash = address.split("").reduce((a, b) => a + b.charCodeAt(0), 0);
   const rawScore = 35 + (hash % 50);
 
@@ -49,8 +46,7 @@ export async function analyzeToken(input: AnalyzeRequest): Promise<RealityGapRes
     rawScore,
   });
 
-  // Detect if it was real LLM or fallback
-  const isFallback = llmResult.summary.includes("LLM unavailable");
+  const isFallback = !!llmResult.debug || llmResult.summary.includes("LLM unavailable");
 
   return {
     address,
@@ -58,9 +54,7 @@ export async function analyzeToken(input: AnalyzeRequest): Promise<RealityGapRes
     score: llmResult.score,
     label: llmResult.label as RealityGapResult["label"],
     confidence: llmResult.confidence,
-    onchain: {
-      smartMoneyActivity: onchainActivity as any,
-    },
+    onchain: { smartMoneyActivity: onchainActivity as any },
     social: {
       mentionVolume: socialVolume as any,
       sentiment: socialSentiment as any,
@@ -68,5 +62,6 @@ export async function analyzeToken(input: AnalyzeRequest): Promise<RealityGapRes
     summary: llmResult.summary,
     timestamp: new Date().toISOString(),
     source: isFallback ? "heuristic" : "llm",
+    debug: llmResult.debug,
   };
 }
