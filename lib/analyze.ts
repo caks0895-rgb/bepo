@@ -42,12 +42,18 @@ export async function analyzeToken(input: AnalyzeRequest): Promise<RealityGapRes
   const socialSentiment = rawScore > 55 ? "bullish" : "neutral";
 
   // Try LLM refinement with Claude Opus 5 via AgentRouter
-  let final = {
+  let final: {
+    score: number;
+    label: RealityGapResult["label"];
+    summary: string;
+    confidence: number;
+    source: "llm" | "heuristic";
+  } = {
     score: rawScore,
-    label: "Medium Gap" as RealityGapResult["label"],
+    label: "Medium Gap",
     summary: "Heuristic analysis only.",
     confidence: 0.55,
-    source: "heuristic" as const,
+    source: "heuristic",
   };
 
   try {
@@ -60,8 +66,10 @@ export async function analyzeToken(input: AnalyzeRequest): Promise<RealityGapRes
     });
 
     final = {
-      ...llmResult,
+      score: llmResult.score,
       label: llmResult.label as RealityGapResult["label"],
+      summary: llmResult.summary,
+      confidence: llmResult.confidence,
       source: "llm",
     };
   } catch (e) {
