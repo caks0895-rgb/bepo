@@ -2,20 +2,20 @@
  * Gemini LLM client for BEPO Reality Gap scoring
  */
 
-const GEMINI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || "";
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+const GEMINI_API_KEY =
+  process.env.GOOGLE_AI_API_KEY ||
+  process.env.GEMINI_API_KEY ||
+  process.env.GOOGLE_API_KEY ||
+  "";
 
-export interface LLMMessage {
-  role: "user" | "assistant" | "system";
-  content: string;
-}
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
 
 export async function callGemini(
   prompt: string,
   options: { maxTokens?: number; temperature?: number } = {}
 ): Promise<string> {
   if (!GEMINI_API_KEY) {
-    throw new Error("GOOGLE_AI_API_KEY is not set");
+    throw new Error("No Gemini API key found (GOOGLE_AI_API_KEY / GEMINI_API_KEY)");
   }
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
@@ -38,16 +38,16 @@ export async function callGemini(
     body: JSON.stringify(body),
   });
 
+  const data = await res.json();
+
   if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Gemini error ${res.status}: ${errText}`);
+    throw new Error(`Gemini ${res.status}: ${JSON.stringify(data)}`);
   }
 
-  const data = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
   if (!text) {
-    throw new Error("No text in Gemini response");
+    throw new Error(`No text in Gemini response: ${JSON.stringify(data)}`);
   }
 
   return text;
@@ -76,15 +76,14 @@ Task:
 3. Write a short, sharp 1-2 sentence summary in English.
 4. Give confidence 0.0-1.0
 
-Respond ONLY in this exact JSON format, no markdown, no extra text:
+Respond ONLY with this exact JSON (no markdown, no extra text):
 {"score": number, "label": "High Gap"|"Medium Gap"|"Low Gap"|"Aligned", "summary": "string", "confidence": number}`;
 
   try {
     const raw = await callGemini(prompt, { maxTokens: 300, temperature: 0.2 });
 
-    // Extract JSON
     const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error("No JSON in response");
+    if (!match) throw new Error("No JSON found in response: " + raw.slice(0, 200));
 
     const parsed = JSON.parse(match[0]);
     return {
@@ -95,8 +94,8 @@ Respond ONLY in this exact JSON format, no markdown, no extra text:
       summary: String(parsed.summary || "Analysis completed."),
       confidence: Math.min(1, Math.max(0, Number(parsed.confidence) || 0.7)),
     };
-  } catch (err) {
-    console.error("LLM scoring failed, falling back:", err);
+  } catch (err: any) {
+    console.error("LLM scoring failed:", err?.message || err);
     let label = "Medium Gap";
     if (params.rawScore >= 70) label = "High Gap";
     else if (params.rawScore >= 55) label = "Medium Gap";
