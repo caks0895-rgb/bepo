@@ -1,7 +1,9 @@
 /**
  * Core Reality Gap analysis logic
- * This is a placeholder that will be upgraded with real onchain + social data
+ * Now with AgentRouter + Claude Opus 5 scoring
  */
+
+import { scoreRealityGap } from "./llm";
 
 export interface AnalyzeRequest {
   address?: string;
@@ -11,9 +13,9 @@ export interface AnalyzeRequest {
 export interface RealityGapResult {
   address: string;
   ticker?: string;
-  score: number; // 0-100
+  score: number;
   label: "High Gap" | "Medium Gap" | "Low Gap" | "Aligned";
-  confidence: number; // 0-1
+  confidence: number;
   onchain: {
     volume24h?: number;
     holderChange24h?: number;
@@ -25,45 +27,62 @@ export interface RealityGapResult {
   };
   summary: string;
   timestamp: string;
+  source?: "llm" | "heuristic";
 }
 
 export async function analyzeToken(input: AnalyzeRequest): Promise<RealityGapResult> {
-  const address = input.address?.toLowerCase() || "unknown";
+  const address = (input.address || "unknown").toLowerCase();
 
-  // TODO: Replace with real data sources
-  // - Alchemy / Basescan for onchain
-  // - Sorsa / TwitterAPI for social
-  // - LLM for final scoring
-
-  // Placeholder logic (deterministic for demo)
+  // === Placeholder signals (will be replaced by real Alchemy + social data) ===
   const hash = address.split("").reduce((a, b) => a + b.charCodeAt(0), 0);
-  const score = 35 + (hash % 50); // between 35-84
+  const rawScore = 35 + (hash % 50);
 
-  let label: RealityGapResult["label"] = "Medium Gap";
-  if (score >= 70) label = "High Gap";
-  else if (score >= 55) label = "Medium Gap";
-  else if (score >= 40) label = "Low Gap";
-  else label = "Aligned";
+  const onchainActivity = rawScore > 60 ? "accumulating" : "neutral";
+  const socialVolume = rawScore > 65 ? "high" : "medium";
+  const socialSentiment = rawScore > 55 ? "bullish" : "neutral";
+
+  // Try LLM refinement with Claude Opus 5 via AgentRouter
+  let final = {
+    score: rawScore,
+    label: "Medium Gap" as RealityGapResult["label"],
+    summary: "Heuristic analysis only.",
+    confidence: 0.55,
+    source: "heuristic" as const,
+  };
+
+  try {
+    const llmResult = await scoreRealityGap({
+      address,
+      ticker: input.ticker,
+      onchainHint: `Smart money activity appears ${onchainActivity}`,
+      socialHint: `Mention volume ${socialVolume}, sentiment ${socialSentiment}`,
+      rawScore,
+    });
+
+    final = {
+      ...llmResult,
+      label: llmResult.label as RealityGapResult["label"],
+      source: "llm",
+    };
+  } catch (e) {
+    console.warn("LLM scoring skipped:", e);
+  }
 
   return {
     address,
     ticker: input.ticker,
-    score,
-    label,
-    confidence: 0.65,
+    score: final.score,
+    label: final.label,
+    confidence: final.confidence,
     onchain: {
-      smartMoneyActivity: score > 60 ? "accumulating" : "neutral",
+      smartMoneyActivity: onchainActivity as any,
     },
     social: {
-      mentionVolume: score > 65 ? "high" : "medium",
-      sentiment: score > 55 ? "bullish" : "neutral",
+      mentionVolume: socialVolume as any,
+      sentiment: socialSentiment as any,
     },
-    summary:
-      score >= 70
-        ? "Significant reality gap detected. Onchain activity appears stronger than current social attention."
-        : score >= 55
-        ? "Moderate gap. Some divergence between onchain flow and social narrative."
-        : "Onchain and social signals are relatively aligned.",
+    summary: final.summary,
     timestamp: new Date().toISOString(),
+    source: final.source,
   };
 }
