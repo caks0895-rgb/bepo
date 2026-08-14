@@ -72,6 +72,7 @@ or
 - [x] Project scaffold
 - [x] Basic analyze endpoint
 - [x] Landing page
+- [x] Linked to Vercel
 - [ ] Real onchain data (Alchemy)
 - [ ] Real social data (Sorsa / alternative)
 - [ ] Full x402 middleware protection
