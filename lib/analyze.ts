@@ -1,6 +1,6 @@
 /**
  * Core Reality Gap analysis logic
- * Now with AgentRouter + Claude Opus 5 scoring
+ * Uses Gemini for scoring when available
  */
 
 import { scoreRealityGap } from "./llm";
@@ -41,47 +41,23 @@ export async function analyzeToken(input: AnalyzeRequest): Promise<RealityGapRes
   const socialVolume = rawScore > 65 ? "high" : "medium";
   const socialSentiment = rawScore > 55 ? "bullish" : "neutral";
 
-  // Try LLM refinement with Claude Opus 5 via AgentRouter
-  let final: {
-    score: number;
-    label: RealityGapResult["label"];
-    summary: string;
-    confidence: number;
-    source: "llm" | "heuristic";
-  } = {
-    score: rawScore,
-    label: "Medium Gap",
-    summary: "Heuristic analysis only.",
-    confidence: 0.55,
-    source: "heuristic",
-  };
+  const llmResult = await scoreRealityGap({
+    address,
+    ticker: input.ticker,
+    onchainHint: `Smart money activity appears ${onchainActivity}`,
+    socialHint: `Mention volume ${socialVolume}, sentiment ${socialSentiment}`,
+    rawScore,
+  });
 
-  try {
-    const llmResult = await scoreRealityGap({
-      address,
-      ticker: input.ticker,
-      onchainHint: `Smart money activity appears ${onchainActivity}`,
-      socialHint: `Mention volume ${socialVolume}, sentiment ${socialSentiment}`,
-      rawScore,
-    });
-
-    final = {
-      score: llmResult.score,
-      label: llmResult.label as RealityGapResult["label"],
-      summary: llmResult.summary,
-      confidence: llmResult.confidence,
-      source: "llm",
-    };
-  } catch (e) {
-    console.warn("LLM scoring skipped:", e);
-  }
+  // Detect if it was real LLM or fallback
+  const isFallback = llmResult.summary.includes("LLM unavailable");
 
   return {
     address,
     ticker: input.ticker,
-    score: final.score,
-    label: final.label,
-    confidence: final.confidence,
+    score: llmResult.score,
+    label: llmResult.label as RealityGapResult["label"],
+    confidence: llmResult.confidence,
     onchain: {
       smartMoneyActivity: onchainActivity as any,
     },
@@ -89,8 +65,8 @@ export async function analyzeToken(input: AnalyzeRequest): Promise<RealityGapRes
       mentionVolume: socialVolume as any,
       sentiment: socialSentiment as any,
     },
-    summary: final.summary,
+    summary: llmResult.summary,
     timestamp: new Date().toISOString(),
-    source: final.source,
+    source: isFallback ? "heuristic" : "llm",
   };
 }
