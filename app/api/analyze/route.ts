@@ -1,15 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeToken } from "@/lib/analyze";
 
-/**
- * BEPO Reality Gap Analysis Endpoint
- * 
- * Protected by x402 in production.
- * For now this is a working skeleton that returns structured data.
- * 
- * Price target: $0.025 USDC on Base
- */
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -24,7 +15,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Run analysis
     const result = await analyzeToken({
       address: address || undefined,
       ticker: ticker || undefined,
@@ -35,8 +25,9 @@ export async function POST(req: NextRequest) {
       data: result,
       meta: {
         version: "0.1.0",
-        priced: false, // will be true once x402 is fully wired
+        priced: false,
         note: "MVP skeleton — real onchain + social data coming next",
+        hasGeminiKey: !!(process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
       },
     });
   } catch (error: any) {
@@ -48,7 +39,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Also support GET for simple testing
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const address = searchParams.get("address") || searchParams.get("contract");
@@ -68,10 +58,10 @@ export async function GET(req: NextRequest) {
         protocol: "x402",
       },
       status: "MVP skeleton live",
+      hasGeminiKey: !!(process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
     });
   }
 
-  // Reuse POST logic
   const result = await analyzeToken({
     address: address || undefined,
     ticker: ticker || undefined,
@@ -80,5 +70,8 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     success: true,
     data: result,
+    meta: {
+      hasGeminiKey: !!(process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
+    },
   });
 }
