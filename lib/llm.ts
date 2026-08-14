@@ -8,7 +8,6 @@ const GEMINI_API_KEY =
   process.env.GOOGLE_API_KEY ||
   "";
 
-// Prefer env, then try modern model names
 const MODEL_CANDIDATES = [
   process.env.GEMINI_MODEL,
   "gemini-2.0-flash",
@@ -16,7 +15,6 @@ const MODEL_CANDIDATES = [
   "gemini-1.5-flash",
   "gemini-1.5-flash-latest",
   "gemini-2.5-flash",
-  "gemini-flash-latest",
 ].filter(Boolean) as string[];
 
 export async function callGemini(prompt: string): Promise<string> {
@@ -33,7 +31,7 @@ export async function callGemini(prompt: string): Promise<string> {
       const body = {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
-          maxOutputTokens: 400,
+          maxOutputTokens: 512,
           temperature: 0.2,
         },
       };
@@ -70,27 +68,23 @@ export async function scoreRealityGap(params: {
   socialHint: string;
   rawScore: number;
 }): Promise<{ score: number; label: string; summary: string; confidence: number; debug?: string }> {
-  const prompt = `You are an expert crypto analyst specializing in Reality Gap analysis (onchain activity vs social hype).
+  const prompt = `You are an expert crypto analyst for Reality Gap (onchain vs social hype).
 
 Token: ${params.ticker || "Unknown"} (${params.address})
-Raw onchain signal: ${params.onchainHint}
-Raw social signal: ${params.socialHint}
-Initial numeric score: ${params.rawScore}/100
+Onchain: ${params.onchainHint}
+Social: ${params.socialHint}
+Initial score: ${params.rawScore}/100
 
-Task:
-1. Refine the Reality Gap score (0-100). Higher = bigger gap between onchain strength and social attention.
-2. Choose one label: "High Gap" | "Medium Gap" | "Low Gap" | "Aligned"
-3. Write a short, sharp 1-2 sentence summary in English.
-4. Give confidence 0.0-1.0
+Return ONLY valid complete JSON (no markdown, no extra text):
+{"score":<0-100>,"label":"High Gap"|"Medium Gap"|"Low Gap"|"Aligned","summary":"<1-2 short sentences>","confidence":<0.0-1.0>}
 
-Respond ONLY with this exact JSON (no markdown):
-{"score": number, "label": "High Gap"|"Medium Gap"|"Low Gap"|"Aligned", "summary": "string", "confidence": number}`;
+Rules: Higher score = bigger gap. Keep summary under 160 chars. JSON must be complete.`;
 
   try {
     const raw = await callGemini(prompt);
 
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error("No JSON: " + raw.slice(0, 120));
+    const match = raw.match(/\{[\s\S]*?\}/);
+    if (!match) throw new Error("No JSON: " + raw.slice(0, 150));
 
     const parsed = JSON.parse(match[0]);
     return {
@@ -98,7 +92,7 @@ Respond ONLY with this exact JSON (no markdown):
       label: ["High Gap", "Medium Gap", "Low Gap", "Aligned"].includes(parsed.label)
         ? parsed.label
         : "Medium Gap",
-      summary: String(parsed.summary || "Analysis completed."),
+      summary: String(parsed.summary || "Analysis completed.").slice(0, 280),
       confidence: Math.min(1, Math.max(0, Number(parsed.confidence) || 0.7)),
     };
   } catch (err: any) {
