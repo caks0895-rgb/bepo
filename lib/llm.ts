@@ -1,68 +1,60 @@
 /**
- * AgentRouter LLM client for BEPO
- * Uses Claude Opus 5 via Anthropic-compatible endpoint
+ * Gemini LLM client for BEPO Reality Gap scoring
  */
 
-const AGENTROUTER_BASE = process.env.AGENTROUTER_BASE_URL || "https://agentrouter.org";
-const AGENTROUTER_KEY = process.env.AGENTROUTER_API_KEY || process.env.ANTHROPIC_API_KEY || "";
-const MODEL = process.env.AGENTROUTER_MODEL || "claude-opus-5";
+const GEMINI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || "";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
 
 export interface LLMMessage {
   role: "user" | "assistant" | "system";
   content: string;
 }
 
-export async function callAgentRouter(
-  messages: LLMMessage[],
+export async function callGemini(
+  prompt: string,
   options: { maxTokens?: number; temperature?: number } = {}
 ): Promise<string> {
-  if (!AGENTROUTER_KEY) {
-    throw new Error("AGENTROUTER_API_KEY is not set");
+  if (!GEMINI_API_KEY) {
+    throw new Error("GOOGLE_AI_API_KEY is not set");
   }
 
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
   const body = {
-    model: MODEL,
-    max_tokens: options.maxTokens ?? 1024,
-    temperature: options.temperature ?? 0.3,
-    messages: messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    })),
+    contents: [
+      {
+        parts: [{ text: prompt }],
+      },
+    ],
+    generationConfig: {
+      maxOutputTokens: options.maxTokens ?? 400,
+      temperature: options.temperature ?? 0.2,
+    },
   };
 
-  // Anthropic Messages style
-  const res = await fetch(`${AGENTROUTER_BASE}/v1/messages`, {
+  const res = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": AGENTROUTER_KEY,
-      Authorization: `Bearer ${AGENTROUTER_KEY}`,
-      "anthropic-version": "2023-06-01",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`AgentRouter error ${res.status}: ${errText}`);
+    throw new Error(`Gemini error ${res.status}: ${errText}`);
   }
 
   const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-  // Handle both Anthropic and OpenAI-style responses
-  if (data.content && Array.isArray(data.content)) {
-    return data.content.map((c: any) => c.text || "").join("");
+  if (!text) {
+    throw new Error("No text in Gemini response");
   }
-  if (data.choices?.[0]?.message?.content) {
-    return data.choices[0].message.content;
-  }
-  if (typeof data === "string") return data;
 
-  throw new Error("Unexpected response format from AgentRouter");
+  return text;
 }
 
 /**
- * Generate Reality Gap summary + refined score using Claude Opus 5
+ * Generate Reality Gap summary + refined score using Gemini
  */
 export async function scoreRealityGap(params: {
   address: string;
@@ -84,13 +76,11 @@ Task:
 3. Write a short, sharp 1-2 sentence summary in English.
 4. Give confidence 0.0-1.0
 
-Respond ONLY in this exact JSON format, no markdown:
+Respond ONLY in this exact JSON format, no markdown, no extra text:
 {"score": number, "label": "High Gap"|"Medium Gap"|"Low Gap"|"Aligned", "summary": "string", "confidence": number}`;
 
   try {
-    const raw = await callAgentRouter([
-      { role: "user", content: prompt },
-    ], { maxTokens: 300, temperature: 0.2 });
+    const raw = await callGemini(prompt, { maxTokens: 300, temperature: 0.2 });
 
     // Extract JSON
     const match = raw.match(/\{[\s\S]*\}/);
@@ -107,7 +97,6 @@ Respond ONLY in this exact JSON format, no markdown:
     };
   } catch (err) {
     console.error("LLM scoring failed, falling back:", err);
-    // Fallback to raw
     let label = "Medium Gap";
     if (params.rawScore >= 70) label = "High Gap";
     else if (params.rawScore >= 55) label = "Medium Gap";
