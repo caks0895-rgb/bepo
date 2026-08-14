@@ -56,7 +56,8 @@ or
       "sentiment": "bullish"
     },
     "summary": "Significant reality gap detected...",
-    "timestamp": "2026-08-14T..."
+    "timestamp": "2026-08-14T...",
+    "source": "llm"
   }
 }
 ```
@@ -73,16 +74,17 @@ or
 - [x] Basic analyze endpoint
 - [x] Landing page
 - [x] Linked to Vercel
+- [x] LLM scoring (AgentRouter + Claude Opus 5)
 - [ ] Real onchain data (Alchemy)
 - [ ] Real social data (Sorsa / alternative)
 - [ ] Full x402 middleware protection
-- [ ] LLM scoring layer
 
 ## Stack
 
 - Next.js 15
 - TypeScript
 - x402 + Coinbase CDP Facilitator
+- AgentRouter (Claude Opus 5)
 - Tailwind CSS
 
 ## License
